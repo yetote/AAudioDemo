@@ -19,5 +19,5 @@ public class AudioPlayer {
 
     }
 
-    public native void createEngine();
+    public native void createEngine(String path);
 }

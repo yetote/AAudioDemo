@@ -8,22 +8,30 @@
 #include <aaudio/AAudio.h>
 #include <string>
 #include "../util/LogUtil.h"
+
 class AudioPlayer {
 public:
-    AudioPlayer();
+    AudioPlayer(const char *path);
 
     ~AudioPlayer();
 
 
+    aaudio_data_callback_result_t dataCallback(AAudioStream *stream,
+                                               void *audioData, int32_t numFrames);
+
+    FILE *file;
+    AAudioStream *playerStream, *readStream;
 private:
     aaudio_result_t result;
     int32_t sampleRate;
     int32_t bufSizeInFrames;
 
-    aaudio_data_callback_result_t dataCallback(AAudioStream *stream, void *userData,
-                                               void *audioData, int32_t numFrames);
+    void writeData();
 
-    void create();
+    void createStream(AAudioStream *stream);
+
+    void createPlayerBuilder();
+    void createReadBuilder();
 
 };
 
