@@ -3,6 +3,7 @@
 //
 
 
+#include <zconf.h>
 #include "AudioPlayer.h"
 
 static const char *audioFormatStr[] = {
@@ -85,17 +86,17 @@ dataCallBack(AAudioStream *stream, void *userData, void *audioData, int32_t numF
 
 void AudioPlayer::writeData() {
     aaudio_result_t clearedFrames = 0;
+    int wFrameCount = 0;
+    char *buffer = new char[44100 * 2 * 2];
     do {
-        char *buffer = new char[44100 * 2 * 2];
         fread(buffer, 44100 * 2 * 2, 1, file);
-        int wFrameCount = AAudioStream_write(readStream, buffer, 1024, 0);
+        wFrameCount = AAudioStream_write(playerStream, buffer, 44100, 200);
         if (wFrameCount < 0) {
             LOGE("写入错误,%s", AAudio_convertResultToText(wFrameCount));
-
         } else {
             LOGE("写入了%d帧", wFrameCount);
         }
-    } while (clearedFrames > 0);
+    } while (wFrameCount >= 0);
 }
 
 void AudioPlayer::createPlayerBuilder() {
@@ -112,7 +113,7 @@ void AudioPlayer::createPlayerBuilder() {
         AAudioStreamBuilder_setSampleRate(builder, 44100);
         AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
         AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
-        AAudioStreamBuilder_setDataCallback(builder, ::dataCallBack, this);
+//        AAudioStreamBuilder_setDataCallback(builder, ::dataCallBack, this);
 
     } else {
         LOGE("无法获取build对象");
@@ -134,10 +135,23 @@ void AudioPlayer::createPlayerBuilder() {
 
         result = AAudioStream_requestStart(playerStream);
         if (result != AAUDIO_OK) {
-            LOGE("打开音频流失败，%s", AAudio_convertResultToText(result));
+            LOGE("请求音频流为打开状态失败，%s", AAudio_convertResultToText(result));
             return;
         }
-        writeData();
+
+        aaudio_stream_state_t inputState = AAUDIO_STREAM_STATE_STARTING;
+        aaudio_stream_state_t nextState = AAUDIO_STREAM_STATE_UNINITIALIZED;
+        int64_t timeoutNanos = 100 * AAUDIO_NANOS_PER_MILLISECOND;
+
+        aaudio_result_t result = AAudioStream_requestStart(playerStream);
+        result = AAudioStream_waitForStateChange(playerStream, inputState, &nextState,
+                                                 timeoutNanos);
+        if (result != AAUDIO_OK) {
+            LOGE("打开流失败. %s", AAudio_convertResultToText(result));
+        }
+        std::thread writeThread(&AudioPlayer::writeData, this);
+        writeThread.detach();
+//        writeData();
     }
     result = AAudioStreamBuilder_delete(builder);
     if (result != AAUDIO_OK) {
@@ -149,7 +163,7 @@ void AudioPlayer::createPlayerBuilder() {
 AudioPlayer::AudioPlayer(const char *path) {
     file = fopen(path, "rb+");
     createPlayerBuilder();
-    createReadBuilder();
+//    createReadBuilder();
 }
 
 aaudio_data_callback_result_t
@@ -175,51 +189,4 @@ AudioPlayer::dataCallback(AAudioStream *stream, void *audioData, int32_t numFram
 }
 
 
-void AudioPlayer::createReadBuilder() {
-    AAudioStreamBuilder *builder;
-    result = AAudio_createStreamBuilder(&builder);
-    if (result != AAUDIO_OK) {
-        LOGE("初始化构造器失败，errorCode:%s", AAudio_convertResultToText(result));
-        return;
-    }
-    if (builder != nullptr) {
-        AAudioStreamBuilder_setDeviceId(builder, AAUDIO_UNSPECIFIED);
-        AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
-        AAudioStreamBuilder_setChannelCount(builder, 2);
-        AAudioStreamBuilder_setSampleRate(builder, 44100);
-        AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-        AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT);
-//        AAudioStreamBuilder_setDataCallback(builder, ::dataCallBack, this);
-
-    } else {
-        LOGE("无法获取build对象");
-        return;
-    }
-
-    result = AAudioStreamBuilder_openStream(builder, &readStream);
-    if (result != AAUDIO_OK) {
-        LOGE("无法创建音频流 errorCode: %s", AAudio_convertResultToText(result));
-        return;
-    }
-    if (readStream != nullptr) {
-        sampleRate = AAudioStream_getSampleRate(readStream);
-        //获取读写一次所需要的帧数
-        bufSizeInFrames = AAudioStream_getBufferSizeInFrames(readStream);
-        //设置缓冲区的大小
-        AAudioStream_setBufferSizeInFrames(readStream, bufSizeInFrames);
-        printAudioStreamInfo(readStream);
-
-        result = AAudioStream_requestStart(readStream);
-        if (result != AAUDIO_OK) {
-            LOGE("打开音频流失败，%s", AAudio_convertResultToText(result));
-            return;
-        }
-        writeData();
-    }
-    result = AAudioStreamBuilder_delete(builder);
-    if (result != AAUDIO_OK) {
-        LOGE("删除构造器失败，%s", AAudio_convertResultToText(result));
-        return;
-    }
-}
 

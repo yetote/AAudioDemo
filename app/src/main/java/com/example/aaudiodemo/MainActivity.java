@@ -16,7 +16,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         audioPlayer = new AudioPlayer();
-        String path = this.getExternalCacheDir().getPath() + "/res/test,pcm";
+        String path = this.getExternalCacheDir().getPath() + "/res/test.pcm";
         Log.e(TAG, "onCreate: " + path);
         audioPlayer.createEngine(path);
     }

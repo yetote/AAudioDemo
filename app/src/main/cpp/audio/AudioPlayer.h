@@ -3,11 +3,14 @@
 #ifndef AAUDIODEMO_AUDIOPLAYER_H
 #define AAUDIODEMO_AUDIOPLAYER_H
 
-#define LOG_TAG "audioPlayer"
 
 #include <aaudio/AAudio.h>
 #include <string>
 #include "../util/LogUtil.h"
+#include <thread>
+
+#define LOG_TAG "audioPlayer"
+#define AAUDIO_NANOS_PER_MILLISECOND 1000000L
 
 class AudioPlayer {
 public:
@@ -31,6 +34,7 @@ private:
     void createStream(AAudioStream *stream);
 
     void createPlayerBuilder();
+
     void createReadBuilder();
 
 };
