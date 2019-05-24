@@ -7,6 +7,7 @@
 #include <aaudio/AAudio.h>
 #include <string>
 #include "../util/LogUtil.h"
+#include "../util/CallBack.h"
 #include <thread>
 
 #define LOG_TAG "audioPlayer"
@@ -14,7 +15,7 @@
 
 class AudioPlayer {
 public:
-    AudioPlayer(const char *path);
+    AudioPlayer(const char *path, CallBack *callBack);
 
     ~AudioPlayer();
 
@@ -28,6 +29,8 @@ private:
     aaudio_result_t result;
     int32_t sampleRate;
     int32_t bufSizeInFrames;
+    CallBack *callBack;
+    char *dataPos;
 
     void writeData();
 

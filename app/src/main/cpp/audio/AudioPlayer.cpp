@@ -75,28 +75,33 @@ void printAudioStreamInfo(const AAudioStream *stream) {
 #undef STREAM_CALL
 }
 
-aaudio_result_t
-dataCallBack(AAudioStream *stream, void *userData, void *audioData, int32_t numFrames) {
-    AudioPlayer *audioPlayer = static_cast<AudioPlayer *>(userData);
-
-
-//    return audioPlayer->dataCallback(stream, audioData, numFrames);
-    return AAUDIO_OK;
+aaudio_data_callback_result_t dataCallback(AAudioStream *stream, void *userData,
+                                           void *audioData, int32_t numFrames) {
+    AudioPlayer *audioPlayer = reinterpret_cast<AudioPlayer *>(userData);
+    return audioPlayer->dataCallback(stream, audioData, numFrames);
 }
 
-void AudioPlayer::writeData() {
-    aaudio_result_t clearedFrames = 0;
-    int wFrameCount = 0;
-    char *buffer = new char[44100 * 2 * 2];
-    do {
-        fread(buffer, 44100 * 2 * 2, 1, file);
-        wFrameCount = AAudioStream_write(playerStream, buffer, 44100, 200);
-        if (wFrameCount < 0) {
-            LOGE("写入错误,%s", AAudio_convertResultToText(wFrameCount));
-        } else {
-            LOGE("写入了%d帧", wFrameCount);
+
+aaudio_data_callback_result_t
+AudioPlayer::dataCallback(AAudioStream *stream, void *audioData, int32_t numFrames) {
+    char *buffer = static_cast<char *>(audioData);
+    //AAudio并不建议在回调中进行I/O操作，因为这可能会导致相乘被阻塞
+    size_t wFrameCount = fread(buffer, numFrames * 2 * 2, 1, file);
+    int j = 0;
+    for (int i = 0; i < numFrames * 2 * 2; ++i) {
+        if (i % (numFrames * 2 * 2 / 20) == 0) {
+            dataPos[j] = buffer[i];
+            j++;
         }
-    } while (wFrameCount >= 0);
+    }
+    callBack->onDraw(callBack->CHILD_THREAD, dataPos);
+    if (wFrameCount < 0) {
+        LOGE("写入错误,%d", wFrameCount);
+
+    } else {
+        LOGE("读取了%d帧", wFrameCount);
+    }
+    return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 
 void AudioPlayer::createPlayerBuilder() {
@@ -113,7 +118,7 @@ void AudioPlayer::createPlayerBuilder() {
         AAudioStreamBuilder_setSampleRate(builder, 44100);
         AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
         AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
-//        AAudioStreamBuilder_setDataCallback(builder, ::dataCallBack, this);
+        AAudioStreamBuilder_setDataCallback(builder, ::dataCallback, this);
 
     } else {
         LOGE("无法获取build对象");
@@ -143,15 +148,11 @@ void AudioPlayer::createPlayerBuilder() {
         aaudio_stream_state_t nextState = AAUDIO_STREAM_STATE_UNINITIALIZED;
         int64_t timeoutNanos = 100 * AAUDIO_NANOS_PER_MILLISECOND;
 
-        aaudio_result_t result = AAudioStream_requestStart(playerStream);
         result = AAudioStream_waitForStateChange(playerStream, inputState, &nextState,
                                                  timeoutNanos);
         if (result != AAUDIO_OK) {
             LOGE("打开流失败. %s", AAudio_convertResultToText(result));
         }
-        std::thread writeThread(&AudioPlayer::writeData, this);
-        writeThread.detach();
-//        writeData();
     }
     result = AAudioStreamBuilder_delete(builder);
     if (result != AAUDIO_OK) {
@@ -160,33 +161,13 @@ void AudioPlayer::createPlayerBuilder() {
     }
 }
 
-AudioPlayer::AudioPlayer(const char *path) {
+AudioPlayer::AudioPlayer(const char *path, CallBack *callBack) {
     file = fopen(path, "rb+");
+    dataPos = new char[20];
+    this->callBack = callBack;
     createPlayerBuilder();
-//    createReadBuilder();
 }
 
-aaudio_data_callback_result_t
-AudioPlayer::dataCallback(AAudioStream *stream, void *audioData, int32_t numFrames) {
-//    char *buffer = new char[44100 * 2 * 2];
-//    fread(buffer, 44100 * 2 * 2, 1, file);
-//    int wFrameCount = AAudioStream_write(audioStream, buffer,numFrames,0);
-//    if (wFrameCount < 0) {
-//        LOGE("写入错误,%s", AAudio_convertResultToText(wFrameCount));
-//
-//    } else {
-//        LOGE("读取了%d帧", wFrameCount);
-//    }
-
-    int rFrameCount = AAudioStream_read(playerStream, audioData, numFrames, 0);
-    if (rFrameCount < 0) {
-        LOGE("读取错误,%s", AAudio_convertResultToText(rFrameCount));
-
-    } else {
-        LOGE("读取了%d帧", rFrameCount);
-    }
-    return AAUDIO_OK;
-}
 
 
 
